@@ -1,0 +1,15 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "hcc-gpx-editor",
+    "compatibility_date": "2026-09-20",
+    "assets": {
+        "directory": "./website/build",
+        "not_found_handling": "404-page"
+    },
+    "routes": [
+        {
+            "pattern": "gpxeditor.holmfirth.cc",
+            "custom_domain": true
+        }
+    ]
+}
