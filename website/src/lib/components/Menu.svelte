@@ -45,6 +45,7 @@
         Maximize,
         Maximize2,
         Minimize2,
+        Save,
     } from '@lucide/svelte';
     import { map } from '$lib/components/map/map';
     import { editMetadata } from '$lib/components/file-list/metadata/utils.svelte';
@@ -74,6 +75,11 @@
     import { boundsManager } from '$lib/logic/bounds';
     import { tick, onMount } from 'svelte';
     import { allowedPastes } from '$lib/components/file-list/sortable-file-list';
+    import { page } from '$app/state';
+    import { browser } from '$app/environment';
+    import { buildGPX } from 'gpx';
+    import { get } from 'svelte/store';
+    import { isAllowedReturnOrigin, type SaveAndCloseMessage } from '$lib/logic/embed-save';
 
     const {
         distanceUnits,
@@ -124,6 +130,30 @@
         document.addEventListener('fullscreenchange', handler);
         return () => document.removeEventListener('fullscreenchange', handler);
     });
+
+    // "Save & close" — only shown when this editor was opened as a popup/iframe
+    // by another site (via ?returnTo=<origin>) that we're allowed to post back to.
+    let returnTo = $derived(page.url.searchParams.get('returnTo'));
+    let showSaveAndClose = $derived(
+        browser && !!window.opener && !!returnTo && isAllowedReturnOrigin(returnTo)
+    );
+
+    function saveAndClose() {
+        if (!returnTo || !window.opener || !isAllowedReturnOrigin(returnTo)) return;
+
+        const fileIds = get(settings.fileOrder);
+        const file = fileIds.length > 0 ? fileStateCollection.getFile(fileIds[0]) : undefined;
+        if (!file) return;
+
+        const message: SaveAndCloseMessage = {
+            source: 'gpx-studio',
+            type: 'save',
+            filename: `${file.metadata.name || 'route'}.gpx`,
+            gpx: buildGPX(file, []),
+        };
+        window.opener.postMessage(message, returnTo);
+        window.close();
+    }
 </script>
 
 <div class="absolute md:top-2 left-0 right-0 z-20 flex flex-row justify-center pointer-events-none">
@@ -530,6 +560,18 @@
             </Menubar.Menu>
         </Menubar.Root>
         <div class="h-fit flex flex-row items-center">
+            {#if showSaveAndClose}
+                <Button
+                    variant="default"
+                    class="cursor-default h-fit rounded-md px-3 py-0.5 mr-2"
+                    onclick={saveAndClose}
+                    aria-label={i18n._('menu.save_and_close_help')}
+                    title={i18n._('menu.save_and_close_help')}
+                >
+                    <Save size="18" />
+                    <span class="ml-1">{i18n._('menu.save_and_close')}</span>
+                </Button>
+            {/if}
             <Button
                 variant="ghost"
                 href="./help"
