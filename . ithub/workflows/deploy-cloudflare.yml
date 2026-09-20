@@ -1,0 +1,68 @@
+name: Deploy to Cloudflare Workers
+
+on:
+    push:
+        branches: 'main'
+    workflow_dispatch: {}
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v5
+
+            - name: Install Node.js
+              uses: actions/setup-node@v6
+              with:
+                  node-version: 24
+                  cache: npm
+                  cache-dependency-path: |
+                      gpx/package-lock.json
+                      website/package-lock.json
+
+            - name: Install dependencies for gpx
+              run: npm install --prefix gpx
+
+            - name: Build gpx
+              run: npm run build --prefix gpx
+
+            - name: Install dependencies for website
+              run: npm install --prefix website
+
+            - name: Create env file
+              run: |
+                  touch website/.env
+                  echo PUBLIC_MAPTILER_KEY=${{ secrets.PUBLIC_MAPTILER_KEY }} >> website/.env
+
+            - name: Build website
+              env:
+                  BASE_PATH: ''
+              run: npm run build --prefix website
+
+            - name: Resolve Cloudflare account ID
+              env:
+                  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+                  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+              run: |
+                  if [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+                    echo "Using CLOUDFLARE_ACCOUNT_ID secret"
+                    echo "CLOUDFLARE_ACCOUNT_ID=$CLOUDFLARE_ACCOUNT_ID" >> "$GITHUB_ENV"
+                    exit 0
+                  fi
+                  echo "No CLOUDFLARE_ACCOUNT_ID secret set, looking it up from the API token..."
+                  RESPONSE=$(curl -sS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=50")
+                  COUNT=$(echo "$RESPONSE" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const j=JSON.parse(d);console.log(j.result ? j.result.length : 0)})")
+                  if [ "$COUNT" != "1" ]; then
+                    echo "::error::Expected exactly 1 Cloudflare account visible to this token, found $COUNT. Set a CLOUDFLARE_ACCOUNT_ID repository secret to disambiguate."
+                    echo "$RESPONSE"
+                    exit 1
+                  fi
+                  ACCOUNT_ID=$(echo "$RESPONSE" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const j=JSON.parse(d);console.log(j.result[0].id)})")
+                  echo "Resolved account: $(echo "$RESPONSE" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const j=JSON.parse(d);console.log(j.result[0].name)})")"
+                  echo "CLOUDFLARE_ACCOUNT_ID=$ACCOUNT_ID" >> "$GITHUB_ENV"
+
+            - name: Deploy to Cloudflare Workers
+              env:
+                  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+              run: npx wrangler@4 deploy
