@@ -13,7 +13,7 @@
     import { Toaster } from '$lib/components/ui/sonner';
     import { i18n } from '$lib/i18n.svelte';
     import { settings } from '$lib/logic/settings';
-    import { loadFiles, fileActions, createFile } from '$lib/logic/file-actions';
+    import { loadFiles } from '$lib/logic/file-actions';
     import { onDestroy, onMount } from 'svelte';
     import { page } from '$app/state';
     import { gpxStatistics, hoveredPoint, slicedGPXStatistics } from '$lib/logic/statistics';
@@ -22,6 +22,7 @@
     import { fileStateCollection } from '$lib/logic/file-state';
     import { isAllowedReturnOrigin } from '$lib/logic/embed-save';
     import { map } from '$lib/components/map/map';
+    import { currentTool, Tool } from '$lib/components/toolbar/tools';
 
     // Holmfirth Co-op car park - used to center the map when a blank editor
     // (no files/ids requested) is opened from the members site and we can't
@@ -50,15 +51,36 @@
 
     onMount(async () => {
         settings.connectToDatabase(db);
-        fileStateCollection.connectToDatabase(db).then(() => {
-            // When opened as a popup/iframe by another site (?returnTo=<its origin>),
-            // start from a clean slate rather than restoring whatever was left open
-            // from a previous editing session in this browser.
-            let returnTo = page.url.searchParams.get('returnTo');
-            if (returnTo && isAllowedReturnOrigin(returnTo)) {
-                fileActions.deleteAllFiles();
-            }
 
+        // When opened as a popup/iframe by another site (?returnTo=<its origin>),
+        // start from a clean slate rather than restoring whatever was left open
+        // from a previous editing session in this browser. This clears the
+        // underlying IndexedDB tables directly, and does so BEFORE
+        // fileStateCollection.connectToDatabase() below subscribes to them -
+        // so the very first data the app ever loads is already empty, and
+        // nothing stale is left for FileActionManager to pick up later.
+        //
+        // Deliberately not using fileActions.deleteAllFiles() here: that goes
+        // through Immer's produceWithPatches() against FileActionManager's
+        // internal file map, which starts out empty on every fresh page load
+        // regardless of what's in IndexedDB (it only fills in asynchronously
+        // as the database loads). Clearing an already-empty map is a no-op
+        // change, so Immer hands back the same Map instance it was given and
+        // freezes it - and once that instance is frozen, that manager can
+        // never accept another direct write to it again, permanently
+        // breaking file loading and creation for the rest of the session
+        // (confirmed via Playwright: this froze the toolbar's routing tool,
+        // and separately broke any file drawn on the map afterwards).
+        let returnTo = page.url.searchParams.get('returnTo');
+        if (returnTo && isAllowedReturnOrigin(returnTo)) {
+            await db.transaction('rw', db.fileids, db.files, db.patches, async () => {
+                await db.fileids.clear();
+                await db.files.clear();
+                await db.patches.clear();
+            });
+        }
+
+        fileStateCollection.connectToDatabase(db).then(() => {
             let files: string[] = JSON.parse(page.url.searchParams.get('files') || '[]');
             let ids: string[] = JSON.parse(page.url.searchParams.get('ids') || '[]');
             let urls: string[] = files.concat(ids.map(getURLForGoogleDriveFile));
@@ -78,19 +100,14 @@
                 });
             } else if (returnTo && isAllowedReturnOrigin(returnTo)) {
                 // Blank editor opened from the members site (e.g. the "Create
-                // Route" flow). Create an empty file and switch to the routing
-                // tool, same as File > New, so the pencil tool has something to
-                // draw into straight away instead of doing nothing. Wrapped in
-                // try/catch: creating a file straight after deleteAllFiles()
-                // above can throw inside the file store's reactive bookkeeping
-                // (an Immer "mutate frozen object" error) - the file still
-                // gets created, but left uncaught the throw would abort the
-                // rest of this callback, including the geolocation code below.
-                try {
-                    createFile();
-                } catch (e) {
-                    console.error('Failed to auto-create a new file', e);
-                }
+                // Route" flow). Switch straight to the routing tool so the
+                // pencil tool is already active - the routing tool creates its
+                // own file on the first map click when nothing is selected
+                // (see Routing.svelte's createFileWithPoint), so there's no
+                // need to create one here - see the note above the DB clear
+                // for why calling createFile()/fileActions.add() this early
+                // is unsafe.
+                currentTool.set(Tool.ROUTING);
 
                 // Center on the rider's current location if we can get it,
                 // otherwise fall back to Holmfirth. Some browsers/policies
