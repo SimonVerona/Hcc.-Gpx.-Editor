@@ -21,6 +21,18 @@
     import { db } from '$lib/db';
     import { fileStateCollection } from '$lib/logic/file-state';
     import { isAllowedReturnOrigin } from '$lib/logic/embed-save';
+    import { map } from '$lib/components/map/map';
+
+    // Holmfirth Co-op car park - used to center the map when a blank editor
+    // (no files/ids requested) is opened from the members site and we can't
+    // get the rider's current location.
+    const HOLMFIRTH_CENTER: [number, number] = [-1.785, 53.5726];
+
+    function flyToStart(center: [number, number]) {
+        map.onLoad((mapInstance) => {
+            mapInstance.jumpTo({ center, zoom: 13 });
+        });
+    }
 
     const {
         treeFileView,
@@ -64,6 +76,23 @@
                 Promise.all(downloads).then((files) => {
                     loadFiles(files.filter((file) => file !== null));
                 });
+            } else if (returnTo && isAllowedReturnOrigin(returnTo)) {
+                // Blank editor opened from the members site (e.g. the "Create
+                // Route" flow) - center on the rider's current location if we
+                // can get it, otherwise fall back to Holmfirth.
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            flyToStart([position.coords.longitude, position.coords.latitude]);
+                        },
+                        () => {
+                            flyToStart(HOLMFIRTH_CENTER);
+                        },
+                        { timeout: 8000 }
+                    );
+                } else {
+                    flyToStart(HOLMFIRTH_CENTER);
+                }
             }
         });
     });
