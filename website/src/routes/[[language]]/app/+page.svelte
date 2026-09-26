@@ -13,7 +13,7 @@
     import { Toaster } from '$lib/components/ui/sonner';
     import { i18n } from '$lib/i18n.svelte';
     import { settings } from '$lib/logic/settings';
-    import { loadFiles, fileActions } from '$lib/logic/file-actions';
+    import { loadFiles, fileActions, createFile } from '$lib/logic/file-actions';
     import { onDestroy, onMount } from 'svelte';
     import { page } from '$app/state';
     import { gpxStatistics, hoveredPoint, slicedGPXStatistics } from '$lib/logic/statistics';
@@ -78,8 +78,13 @@
                 });
             } else if (returnTo && isAllowedReturnOrigin(returnTo)) {
                 // Blank editor opened from the members site (e.g. the "Create
-                // Route" flow) - center on the rider's current location if we
-                // can get it, otherwise fall back to Holmfirth.
+                // Route" flow). Create an empty file and switch to the routing
+                // tool, same as File > New, so the pencil tool has something to
+                // draw into straight away instead of doing nothing.
+                createFile();
+
+                // Center on the rider's current location if we can get it,
+                // otherwise fall back to Holmfirth.
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
