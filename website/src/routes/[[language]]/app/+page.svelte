@@ -80,23 +80,42 @@
                 // Blank editor opened from the members site (e.g. the "Create
                 // Route" flow). Create an empty file and switch to the routing
                 // tool, same as File > New, so the pencil tool has something to
-                // draw into straight away instead of doing nothing.
-                createFile();
+                // draw into straight away instead of doing nothing. Wrapped in
+                // try/catch: creating a file straight after deleteAllFiles()
+                // above can throw inside the file store's reactive bookkeeping
+                // (an Immer "mutate frozen object" error) - the file still
+                // gets created, but left uncaught the throw would abort the
+                // rest of this callback, including the geolocation code below.
+                try {
+                    createFile();
+                } catch (e) {
+                    console.error('Failed to auto-create a new file', e);
+                }
 
                 // Center on the rider's current location if we can get it,
-                // otherwise fall back to Holmfirth.
+                // otherwise fall back to Holmfirth. Some browsers/policies
+                // never call either geolocation callback at all, so this also
+                // runs its own fallback timer rather than relying solely on
+                // the browser to honor the `timeout` option below.
+                let centered = false;
+                const centerOnce = (center: [number, number]) => {
+                    if (centered) return;
+                    centered = true;
+                    flyToStart(center);
+                };
+                setTimeout(() => centerOnce(HOLMFIRTH_CENTER), 8500);
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
                         (position) => {
-                            flyToStart([position.coords.longitude, position.coords.latitude]);
+                            centerOnce([position.coords.longitude, position.coords.latitude]);
                         },
                         () => {
-                            flyToStart(HOLMFIRTH_CENTER);
+                            centerOnce(HOLMFIRTH_CENTER);
                         },
                         { timeout: 8000 }
                     );
                 } else {
-                    flyToStart(HOLMFIRTH_CENTER);
+                    centerOnce(HOLMFIRTH_CENTER);
                 }
             }
         });
