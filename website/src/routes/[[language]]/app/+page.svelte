@@ -13,13 +13,14 @@
     import { Toaster } from '$lib/components/ui/sonner';
     import { i18n } from '$lib/i18n.svelte';
     import { settings } from '$lib/logic/settings';
-    import { loadFiles } from '$lib/logic/file-actions';
+    import { loadFiles, fileActions } from '$lib/logic/file-actions';
     import { onDestroy, onMount } from 'svelte';
     import { page } from '$app/state';
     import { gpxStatistics, hoveredPoint, slicedGPXStatistics } from '$lib/logic/statistics';
     import { getURLForGoogleDriveFile } from '$lib/components/embedding/embedding';
     import { db } from '$lib/db';
     import { fileStateCollection } from '$lib/logic/file-state';
+    import { isAllowedReturnOrigin } from '$lib/logic/embed-save';
 
     const {
         treeFileView,
@@ -38,6 +39,14 @@
     onMount(async () => {
         settings.connectToDatabase(db);
         fileStateCollection.connectToDatabase(db).then(() => {
+            // When opened as a popup/iframe by another site (?returnTo=<its origin>),
+            // start from a clean slate rather than restoring whatever was left open
+            // from a previous editing session in this browser.
+            let returnTo = page.url.searchParams.get('returnTo');
+            if (returnTo && isAllowedReturnOrigin(returnTo)) {
+                fileActions.deleteAllFiles();
+            }
+
             let files: string[] = JSON.parse(page.url.searchParams.get('files') || '[]');
             let ids: string[] = JSON.parse(page.url.searchParams.get('ids') || '[]');
             let urls: string[] = files.concat(ids.map(getURLForGoogleDriveFile));
