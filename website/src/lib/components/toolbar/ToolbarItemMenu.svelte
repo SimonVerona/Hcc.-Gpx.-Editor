@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { Tool, currentTool } from '$lib/components/toolbar/tools';
+    import { Tool, currentTool, toolbarVisible } from '$lib/components/toolbar/tools';
     import * as Card from '$lib/components/ui/card';
     import Routing from '$lib/components/toolbar/tools/routing/Routing.svelte';
     import Scissors from '$lib/components/toolbar/tools/scissors/Scissors.svelte';
@@ -39,7 +39,9 @@
 
 {#if $currentTool !== null}
     <div
-        class="translate-x-1 h-full animate-in fade-in-0 zoom-in-95 slide-in-from-left-2 {className}"
+        class="{$toolbarVisible
+            ? 'translate-x-1 h-full'
+            : 'fixed top-14 left-2 z-20'} animate-in fade-in-0 zoom-in-95 slide-in-from-left-2 {className}"
     >
         <div class="rounded-md shadow-md pointer-events-auto">
             <Card.Root class="rounded-md border-none py-2.5">

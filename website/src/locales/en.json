@@ -84,7 +84,10 @@
         "copy_coordinates": "Copy coordinates",
         "edit_osm": "Edit in OpenStreetMap",
         "save_and_close": "Save & close",
-        "save_and_close_help": "Save this route and return to Holmfirth CC"
+        "save_and_close_help": "Save this route and return to Holmfirth CC",
+        "exit": "Exit",
+        "plan_route": "Plan Route",
+        "toggle_toolbar": "Show/hide tools"
     },
     "toolbar": {
         "routing": {

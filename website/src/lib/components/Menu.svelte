@@ -1,5 +1,6 @@
 <script lang="ts">
     import * as Menubar from '$lib/components/ui/menubar/index.js';
+    import * as Popover from '$lib/components/ui/popover';
     import { Button } from '$lib/components/ui/button';
     import Logo from '$lib/components/Logo.svelte';
     import Shortcut from '$lib/components/Shortcut.svelte';
@@ -10,7 +11,6 @@
         Undo2,
         Redo2,
         Trash2,
-        Heart,
         Map,
         Layers2,
         Box,
@@ -29,7 +29,6 @@
         File,
         View,
         FilePen,
-        HeartHandshake,
         PersonStanding,
         Eye,
         EyeOff,
@@ -46,6 +45,11 @@
         Maximize2,
         Minimize2,
         Save,
+        Menu as MenuIcon,
+        PanelLeft,
+        LogOut,
+        Pencil,
+        SquareArrowOutDownRight,
     } from '@lucide/svelte';
     import { map } from '$lib/components/map/map';
     import { editMetadata } from '$lib/components/file-list/metadata/utils.svelte';
@@ -80,6 +84,7 @@
     import { buildGPX } from 'gpx';
     import { get } from 'svelte/store';
     import { isAllowedReturnOrigin, type SaveAndCloseMessage } from '$lib/logic/embed-save';
+    import { currentTool, Tool, toolbarVisible } from '$lib/components/toolbar/tools';
 
     const {
         distanceUnits,
@@ -95,6 +100,7 @@
         directionMarkers,
         streetViewSource,
         routing,
+        minimizeRoutingMenu,
     } = settings;
 
     const canUndo = fileActionManager.canUndo;
@@ -138,6 +144,22 @@
         browser && !!window.opener && !!returnTo && isAllowedReturnOrigin(returnTo)
     );
 
+    // "Embedded" mode: the editor was opened from the members site rather than
+    // visited directly. Same condition as showSaveAndClose - it drives the
+    // compact hamburger-menu layout below.
+    let embedded = $derived(showSaveAndClose);
+
+    // The left-hand toolbar is hidden by default in embedded mode (it has its
+    // own toggle in the compact bar instead). This only needs to run once,
+    // when we first know whether we're embedded.
+    let toolbarDefaultApplied = false;
+    $effect(() => {
+        if (embedded && !toolbarDefaultApplied) {
+            toolbarDefaultApplied = true;
+            $toolbarVisible = false;
+        }
+    });
+
     function saveAndClose() {
         if (!returnTo || !window.opener || !isAllowedReturnOrigin(returnTo)) return;
 
@@ -154,77 +176,103 @@
         window.opener.postMessage(message, returnTo);
         window.close();
     }
+
+    // "Exit" (embedded mode File menu) - close without saving.
+    function exitEditor() {
+        if (browser && window.opener) {
+            window.close();
+        } else {
+            window.location.href = getURLForLanguage(i18n.lang, '/');
+        }
+    }
+
+    // "Plan Route" (embedded mode) - duplicates the toolbar pencil button's
+    // toggle behaviour, and makes sure the routing panel isn't left minimized
+    // from an earlier session when freshly activated.
+    function togglePlanRoute() {
+        if ($currentTool === Tool.ROUTING) {
+            $currentTool = null;
+        } else {
+            $currentTool = Tool.ROUTING;
+            $minimizeRoutingMenu = false;
+        }
+    }
 </script>
 
-<div class="absolute md:top-2 left-0 right-0 z-20 flex flex-row justify-center pointer-events-none">
-    <div
-        class="w-fit flex flex-row items-center justify-center p-1 bg-background rounded-b-md md:rounded-md pointer-events-auto shadow-md"
-    >
-        <a href={getURLForLanguage(i18n.lang, '/')} target="_blank" class="shrink-0">
-            <Logo class="h-5 mt-0.5 mx-2 md:hidden" iconOnly={true} width="16" />
-            <Logo class="h-5 mt-0.5 mx-2 hidden md:block" width="96" />
-        </a>
-        <Menubar.Root class="border-none shadow-none h-fit p-0">
-            <Menubar.Menu>
-                <Menubar.Trigger aria-label={i18n._('gpx.file')}>
+{#snippet mainMenus()}
+    <Menubar.Root class="border-none shadow-none h-fit p-0">
+        <Menubar.Menu>
+            <Menubar.Trigger aria-label={i18n._('gpx.file')}>
                     <File size="18" class="md:hidden" />
                     <span class="hidden md:block">{i18n._('gpx.file')}</span>
                 </Menubar.Trigger>
                 <Menubar.Content class="border-none">
-                    <Menubar.Item onclick={createFile}>
-                        <Plus size="16" />
-                        {i18n._('menu.new')}
-                        <Shortcut key="+" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item onclick={triggerFileInput}>
-                        <FolderOpen size="16" />
-                        {i18n._('menu.open')}
-                        <Shortcut key="O" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item
-                        onclick={fileActions.duplicateSelection}
-                        disabled={$selection.size == 0}
-                    >
-                        <Copy size="16" />
-                        {i18n._('menu.duplicate')}
-                        <Shortcut key="D" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item
-                        onclick={() => tick().then(fileActions.deleteSelectedFiles)}
-                        disabled={$selection.size == 0}
-                    >
-                        <FileX size="16" />
-                        {i18n._('menu.delete')}
-                        <Shortcut key="⌫" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Item
-                        onclick={fileActions.deleteAllFiles}
-                        disabled={fileStateCollection.size == 0}
-                    >
-                        <FileX size="16" />
-                        {i18n._('menu.delete_all')}
-                        <Shortcut key="⌫" ctrl={true} shift={true} />
-                    </Menubar.Item>
-                    <Menubar.Separator />
-                    <Menubar.Item
-                        onclick={() => (exportState.current = ExportState.SELECTION)}
-                        disabled={$selection.size == 0}
-                    >
-                        <Download size="16" />
-                        {i18n._('menu.export')}
-                        <Shortcut key="S" ctrl={true} />
-                    </Menubar.Item>
-                    <Menubar.Item
-                        onclick={() => (exportState.current = ExportState.ALL)}
-                        disabled={fileStateCollection.size == 0}
-                    >
-                        <Download size="16" />
-                        {i18n._('menu.export_all')}
-                        <Shortcut key="S" ctrl={true} shift={true} />
-                    </Menubar.Item>
+                    {#if embedded}
+                        <Menubar.Item onclick={exitEditor}>
+                            <LogOut size="16" />
+                            {i18n._('menu.exit')}
+                        </Menubar.Item>
+                        <Menubar.Separator />
+                        <Menubar.Item onclick={saveAndClose}>
+                            <Save size="16" />
+                            {i18n._('menu.save_and_close')}
+                        </Menubar.Item>
+                    {:else}
+                        <Menubar.Item onclick={createFile}>
+                            <Plus size="16" />
+                            {i18n._('menu.new')}
+                            <Shortcut key="+" ctrl={true} />
+                        </Menubar.Item>
+                        <Menubar.Separator />
+                        <Menubar.Item onclick={triggerFileInput}>
+                            <FolderOpen size="16" />
+                            {i18n._('menu.open')}
+                            <Shortcut key="O" ctrl={true} />
+                        </Menubar.Item>
+                        <Menubar.Separator />
+                        <Menubar.Item
+                            onclick={fileActions.duplicateSelection}
+                            disabled={$selection.size == 0}
+                        >
+                            <Copy size="16" />
+                            {i18n._('menu.duplicate')}
+                            <Shortcut key="D" ctrl={true} />
+                        </Menubar.Item>
+                        <Menubar.Separator />
+                        <Menubar.Item
+                            onclick={() => tick().then(fileActions.deleteSelectedFiles)}
+                            disabled={$selection.size == 0}
+                        >
+                            <FileX size="16" />
+                            {i18n._('menu.delete')}
+                            <Shortcut key="⌫" ctrl={true} />
+                        </Menubar.Item>
+                        <Menubar.Item
+                            onclick={fileActions.deleteAllFiles}
+                            disabled={fileStateCollection.size == 0}
+                        >
+                            <FileX size="16" />
+                            {i18n._('menu.delete_all')}
+                            <Shortcut key="⌫" ctrl={true} shift={true} />
+                        </Menubar.Item>
+                        <Menubar.Separator />
+                        <Menubar.Item
+                            onclick={() => (exportState.current = ExportState.SELECTION)}
+                            disabled={$selection.size == 0}
+                        >
+                            <Download size="16" />
+                            {i18n._('menu.export')}
+                            <Shortcut key="S" ctrl={true} />
+                        </Menubar.Item>
+                        <Menubar.Item
+                            onclick={() => (exportState.current = ExportState.ALL)}
+                            disabled={fileStateCollection.size == 0}
+                        >
+                            <Download size="16" />
+                            {i18n._('menu.export_all')}
+                            <Shortcut key="S" ctrl={true} shift={true} />
+                        </Menubar.Item>
+                    {/if}
                 </Menubar.Content>
             </Menubar.Menu>
             <Menubar.Menu>
@@ -558,47 +606,95 @@
                     </Menubar.Item>
                 </Menubar.Content>
             </Menubar.Menu>
-        </Menubar.Root>
-        <div class="h-fit flex flex-row items-center">
-            {#if showSaveAndClose}
-                <Button
-                    variant="default"
-                    class="cursor-default h-fit rounded-md px-3 py-0.5 mr-2"
-                    onclick={saveAndClose}
-                    aria-label={i18n._('menu.save_and_close_help')}
-                    title={i18n._('menu.save_and_close_help')}
+    </Menubar.Root>
+{/snippet}
+
+{#snippet helpButton()}
+    <Button
+        variant="ghost"
+        href="./help"
+        target="_blank"
+        class="cursor-default h-fit rounded-md px-3 py-0.5"
+        aria-label={i18n._('menu.help')}
+    >
+        <BookOpenText size="18" class="md:hidden" />
+        <span class="hidden md:block">
+            {i18n._('menu.help')}
+        </span>
+    </Button>
+{/snippet}
+
+<div class="absolute md:top-2 left-0 right-0 z-20 flex flex-row justify-center pointer-events-none">
+    <div
+        class="w-fit flex flex-row items-center justify-center p-1 bg-background rounded-b-md md:rounded-md pointer-events-auto shadow-md"
+    >
+        {#if embedded}
+            <Popover.Root>
+                <Popover.Trigger
+                    class="cursor-default h-fit rounded-md px-2 py-0.5 inline-flex items-center justify-center hover:bg-accent"
+                    aria-label={i18n._('menu.more')}
+                    title={i18n._('menu.more')}
                 >
-                    <Save size="18" />
-                    <span class="ml-1">{i18n._('menu.save_and_close')}</span>
-                </Button>
-            {/if}
+                    <MenuIcon size="18" />
+                </Popover.Trigger>
+                <Popover.Content class="p-1 w-fit" align="start">
+                    <div class="flex flex-col items-stretch gap-1">
+                        {@render mainMenus()}
+                        {@render helpButton()}
+                    </div>
+                </Popover.Content>
+            </Popover.Root>
             <Button
                 variant="ghost"
-                href="./help"
-                target="_blank"
-                class="cursor-default h-fit rounded-md px-3 py-0.5"
-                aria-label={i18n._('menu.help')}
+                class="cursor-default h-fit rounded-md px-2 py-0.5"
+                onclick={() => ($toolbarVisible = !$toolbarVisible)}
+                aria-label={i18n._('menu.toggle_toolbar')}
+                title={i18n._('menu.toggle_toolbar')}
             >
-                <BookOpenText size="18" class="md:hidden" />
-                <span class="hidden md:block">
-                    {i18n._('menu.help')}
-                </span>
+                <PanelLeft size="18" />
             </Button>
             <Button
                 variant="ghost"
-                href="https://opencollective.com/gpxstudio"
-                target="_blank"
-                class="cursor-default h-fit rounded-md font-bold text-support hover:text-support px-3 py-0.5"
-                aria-label={i18n._('menu.donate')}
+                class="cursor-default h-fit rounded-md px-2 py-0.5"
+                onclick={togglePlanRoute}
+                aria-label={i18n._('menu.plan_route')}
+                title={i18n._('menu.plan_route')}
             >
-                <HeartHandshake size="18" class="md:hidden" />
-                <span class="hidden md:flex flex-row items-center">
-                    {i18n._('menu.donate')}
-                    <Heart size="16" class="ml-1" fill="var(--support)" />
-                </span>
+                {#if $currentTool === Tool.ROUTING}
+                    <SquareArrowOutDownRight size="18" />
+                {:else}
+                    <Pencil size="18" />
+                {/if}
             </Button>
-        </div>
+            <Button
+                variant="default"
+                class="cursor-default h-fit rounded-md px-3 py-0.5 ml-1"
+                onclick={saveAndClose}
+                aria-label={i18n._('menu.save_and_close_help')}
+                title={i18n._('menu.save_and_close_help')}
+            >
+                <Save size="18" />
+                <span class="ml-1">{i18n._('menu.save_and_close')}</span>
+            </Button>
+        {:else}
+            {@render mainMenus()}
+            <div class="h-fit flex flex-row items-center">
+                {@render helpButton()}
+            </div>
+        {/if}
     </div>
+</div>
+
+<div class="fixed bottom-2 right-2 z-20 pointer-events-none">
+    <a
+        href={getURLForLanguage(i18n.lang, '/')}
+        target="_blank"
+        class="inline-block pointer-events-auto opacity-80 hover:opacity-100 origin-bottom-right scale-[0.25]"
+        aria-label="gpx.studio"
+    >
+        <Logo class="h-5 mx-2 md:hidden" iconOnly={true} width="16" />
+        <Logo class="h-5 mx-2 hidden md:block" width="96" />
+    </a>
 </div>
 
 <Export />
