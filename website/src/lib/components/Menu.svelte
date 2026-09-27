@@ -84,7 +84,12 @@
     import { base } from '$app/paths';
     import { buildGPX } from 'gpx';
     import { get } from 'svelte/store';
-    import { isAllowedReturnOrigin, type SaveAndCloseMessage } from '$lib/logic/embed-save';
+    import {
+        isAllowedReturnOrigin,
+        getReactNativeWebViewBridge,
+        type SaveAndCloseMessage,
+        type ExitMessage
+    } from '$lib/logic/embed-save';
     import { currentTool, Tool, toolbarVisible } from '$lib/components/toolbar/tools';
 
     const {
@@ -139,10 +144,16 @@
     });
 
     // "Save & close" — only shown when this editor was opened as a popup/iframe
-    // by another site (via ?returnTo=<origin>) that we're allowed to post back to.
+    // by another site (via ?returnTo=<origin>) that we're allowed to post back
+    // to, either as a real browser popup (window.opener) or inside the HCC
+    // mobile app's in-app editor WebView (window.ReactNativeWebView - see
+    // embed-save.ts and holmfirth-cc-app's EditorScreen.tsx).
     let returnTo = $derived(page.url.searchParams.get('returnTo'));
     let showSaveAndClose = $derived(
-        browser && !!window.opener && !!returnTo && isAllowedReturnOrigin(returnTo)
+        browser &&
+            (!!window.opener || !!getReactNativeWebViewBridge()) &&
+            !!returnTo &&
+            isAllowedReturnOrigin(returnTo)
     );
 
     // "Embedded" mode: the editor was opened from the members site rather than
@@ -162,7 +173,9 @@
     });
 
     function saveAndClose() {
-        if (!returnTo || !window.opener || !isAllowedReturnOrigin(returnTo)) return;
+        const reactNativeWebView = getReactNativeWebViewBridge();
+        if (!returnTo || (!window.opener && !reactNativeWebView) || !isAllowedReturnOrigin(returnTo))
+            return;
 
         const fileIds = get(settings.fileOrder);
         const file = fileIds.length > 0 ? fileStateCollection.getFile(fileIds[0]) : undefined;
@@ -174,14 +187,24 @@
             filename: `${file.metadata.name || 'route'}.gpx`,
             gpx: buildGPX(file, []),
         };
-        window.opener.postMessage(message, returnTo);
-        window.close();
+        if (window.opener) {
+            window.opener.postMessage(message, returnTo);
+            window.close();
+        } else if (reactNativeWebView) {
+            // No window.close() here - EditorScreen.tsx pops itself once it
+            // receives this message, closing the in-app editor screen.
+            reactNativeWebView.postMessage(JSON.stringify(message));
+        }
     }
 
     // "Exit" (embedded mode File menu) - close without saving.
     function exitEditor() {
+        const reactNativeWebView = getReactNativeWebViewBridge();
         if (browser && window.opener) {
             window.close();
+        } else if (browser && reactNativeWebView) {
+            const message: ExitMessage = { source: 'gpx-studio', type: 'exit' };
+            reactNativeWebView.postMessage(JSON.stringify(message));
         } else {
             window.location.href = getURLForLanguage(i18n.lang, '/');
         }
