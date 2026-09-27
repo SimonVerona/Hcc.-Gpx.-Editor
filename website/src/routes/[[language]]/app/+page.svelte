@@ -73,11 +73,19 @@
         // and separately broke any file drawn on the map afterwards).
         let returnTo = page.url.searchParams.get('returnTo');
         if (returnTo && isAllowedReturnOrigin(returnTo)) {
-            await db.transaction('rw', db.fileids, db.files, db.patches, async () => {
-                await db.fileids.clear();
-                await db.files.clear();
-                await db.patches.clear();
-            });
+            // Best-effort: if IndexedDB throws here (e.g. stale/locked state
+            // left over from a previous session), don't let it take down the
+            // rest of this onMount - the geolocation centering and routing
+            // tool activation below must still run even if the clear fails.
+            try {
+                await db.transaction('rw', db.fileids, db.files, db.patches, async () => {
+                    await db.fileids.clear();
+                    await db.files.clear();
+                    await db.patches.clear();
+                });
+            } catch (error) {
+                console.error('Failed to clear local editor state before opening a blank editor:', error);
+            }
         }
 
         fileStateCollection.connectToDatabase(db).then(() => {
