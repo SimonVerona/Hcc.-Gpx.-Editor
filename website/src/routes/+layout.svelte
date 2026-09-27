@@ -56,7 +56,7 @@
 
     $effect(() => {
         if (i18n.isLoading) return;
-        let title = `gpx.studio — ${i18n._(`metadata.${page.route.id?.replace('/[[language]]', '').split('/')[1] ?? 'home'}_title`)}`;
+        let title = 'Holmfirth Cycling Club GPX Editor';
         if (page.params.guide) {
             document.title = `${title} | ${data.guideTitles[page.params.guide]}`;
         } else {

@@ -9,33 +9,34 @@ export async function handle({ event, resolve }) {
     const path = event.url.pathname;
     const page = event.route.id?.replace('/[[language]]', '').split('/')[1] ?? 'home';
 
-    let title = strings.metadata[`${page}_title`];
     const description = strings.metadata[`description`];
+
+    let siteTitle = 'Holmfirth Cycling Club GPX Editor';
 
     if (page === 'help' && event.params.guide) {
         const [guide, subguide] = event.params.guide.split('/');
         const guideModule = subguide
             ? await import(`./lib/docs/${language}/${guide}/${subguide}.mdx`)
             : await import(`./lib/docs/${language}/${guide}.mdx`);
-        title = `${title} | ${guideModule.metadata.title}`;
+        siteTitle = `${siteTitle} | ${guideModule.metadata.title}`;
     }
 
     const htmlTag = `<html lang="${language}" translate="no">`;
 
     let headTag = `<head>
-    <title>gpx.studio — ${title}</title>
+    <title>${siteTitle}</title>
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
         "@type": "WebSite",
-        "name": "gpx.studio",
-        "url": "https://gpx.studio"
+        "name": "${siteTitle}",
+        "url": "https://gpxeditor.holmfirth.cc"
     }
     </script>
     <meta name="description" content="${description}" />
-    <meta property="og:title" content="gpx.studio — ${title}" />
+    <meta property="og:title" content="${siteTitle}" />
     <meta property="og:description" content="${description}" />
-    <meta name="twitter:title" content="gpx.studio — ${title}" />
+    <meta name="twitter:title" content="${siteTitle}" />
     <meta name="twitter:description" content="${description}" />
     <meta property="og:image" content="https://gpx.studio${base}/og_logo.png" />
     <meta property="og:url" content="https://gpx.studio/" />
