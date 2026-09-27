@@ -81,6 +81,7 @@
     import { allowedPastes } from '$lib/components/file-list/sortable-file-list';
     import { page } from '$app/state';
     import { browser } from '$app/environment';
+    import { base } from '$app/paths';
     import { buildGPX } from 'gpx';
     import { get } from 'svelte/store';
     import { isAllowedReturnOrigin, type SaveAndCloseMessage } from '$lib/logic/embed-save';
@@ -629,6 +630,11 @@
         class="w-fit flex flex-row items-center justify-center p-1 bg-background rounded-b-md md:rounded-md pointer-events-auto shadow-md"
     >
         {#if embedded}
+            <img
+                src="{base}/hcc-logo.png"
+                alt="Holmfirth Cycling Club"
+                class="h-7 w-7 rounded-full mr-1 shrink-0"
+            />
             <Popover.Root>
                 <Popover.Trigger
                     class="cursor-default h-fit rounded-md px-2 py-0.5 inline-flex items-center justify-center hover:bg-accent"
